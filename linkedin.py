@@ -66,7 +66,7 @@ def send_to_telegram(df):
         requests.get(telegram_url)
 
 # Main scraping logic
-locations = ['United States', 'India', 'United Kingdom', 'Nigeria', 'Canada', 'United Arab Emirates']
+locations = ['new york', 'new delhi', 'london', 'lagos', 'ottawa', 'toronto', 'cardiff', 'liverpool', 'nigeria']
 jobs = ['machine learning', 'data analyst', 'data scientist', 'data engineer', 'business intelligence analyst']
 all_data = []
 
