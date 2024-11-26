@@ -61,7 +61,7 @@ def extract_jobs(driver, location, job, start):
 def send_to_telegram(df):
     telegram_url_template = os.getenv("TELEGRAM_URL")
     for _, row in df.iterrows():
-        message = f"{row['Title']}. Location: {row['Location']}. Link: {row['Link']}"
+        message = f"{row['Title']}. Location: {row['Location']}. Link: {row['Link']}. Time Posted: {row['Time Posted']}"
         telegram_url = telegram_url_template.format(message)
         requests.get(telegram_url)
 
