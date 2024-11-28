@@ -32,8 +32,8 @@ def extract_jobs(driver, location, job, start):
             title = title_tag.text.strip()
             link = title_tag.get_attribute('href')
             
-            # Remove everything from "\n" till the end
-            title = re.sub(r'\n.*', '', title)
+            # Improved filtering to remove only problematic newline characters without affecting the rest of the title
+            title = re.sub(r'\n', ' ', title)  # Replace newlines with spaces to preserve the full title
         except:
             title = "N/A"
             link = "N/A"
@@ -57,11 +57,11 @@ def extract_jobs(driver, location, job, start):
     
     return all_data
 
-# Function to send message to Telegram
+# Function to send messages to Telegram
 def send_to_telegram(df):
     telegram_url_template = os.getenv("TELEGRAM_URL")
     for _, row in df.iterrows():
-        message = f"{row['Title']}. Location: {row['Location']}. Link: {row['Link']}. Time Posted: {row['Time Posted']}"
+        message = f"{row['Title']}. \n Location: {row['Location']}. \n Link: {row['Link']}. \n Time Posted: {row['Time Posted']}"
         telegram_url = telegram_url_template.format(message)
         requests.get(telegram_url)
 
@@ -82,12 +82,8 @@ for location in locations:
             # Longer wait between requests to reduce the chance of being rate-limited
             time.sleep(random.uniform(10, 20))
 
-# Close the driver
+# Close the driver after scraping is complete
 driver.quit()
 
-# Save data to CSV
-df = pd.DataFrame(all_data)
-df.to_csv("linkedin_jobs_with_time.csv", index=False)
-
-# Send the results to Telegram
+# Send the results to Telegram after scraping is complete
 send_to_telegram(df)
