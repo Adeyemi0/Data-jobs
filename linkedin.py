@@ -46,6 +46,7 @@ def extract_jobs(location, job, start):
                 
                 # Remove everything after "..." using regex
                 title = re.sub(r'\bLinkedIn\b.*', '', title, flags=re.IGNORECASE)
+                title = re.sub(r'\bhttps://\b.*', '', title, flags=re.IGNORECASE)
                 
                 link = title_tag.get_attribute('href')
             except:
