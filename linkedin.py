@@ -9,6 +9,7 @@ import os
 import requests
 import logging
 from fake_useragent import UserAgent
+from requests.exceptions import RequestException
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,7 +45,7 @@ def extract_jobs(location, job, start):
                 title = title_tag.text.strip()
                 
                 # Remove everything after "..." using regex
-                title = re.sub(r'\.\.\..*', '', title)
+                title = re.sub(r'\bLinkedIn\b.*', '', title, flags=re.IGNORECASE)
                 
                 link = title_tag.get_attribute('href')
             except:
@@ -75,22 +76,36 @@ def extract_jobs(location, job, start):
         logger.error(f"Error during scraping for {job} in {location} (start={start}): {e}")
         return []
 
-# Function to send messages to Telegram
+# Function to send messages to Telegram with rate limit handling
 def send_to_telegram(df):
     telegram_url_template = os.getenv("TELEGRAM_URL")
     max_messages_per_second = 30
     delay_between_batches = 1  # 1 second delay after sending a batch of messages
     batch_size = max_messages_per_second  # Send messages in batches of 30
+    max_retries = 5  # Max retries in case of 429 rate-limiting error
+    retry_delay = 2  # Start with a 2-second delay between retries
 
     for i, (_, row) in enumerate(df.iterrows(), start=1):
         message = f"{row['Title']}. \nLocation: {row['Location']}. \nLink: {row['Link']}. \nTime Posted: {row['Time Posted']}"
         telegram_url = telegram_url_template.format(message)
-        try:
-            response = requests.get(telegram_url, timeout=10)
-            if response.status_code != 200:
-                logger.warning(f"Failed to send message to Telegram: {response.status_code}")
-        except requests.RequestException as e:
-            logger.error(f"Error sending message to Telegram: {e}")
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            try:
+                response = requests.get(telegram_url, timeout=10)
+                if response.status_code == 200:
+                    break  # Successful, break the retry loop
+                elif response.status_code == 429:
+                    logger.warning(f"Rate limit hit (429). Retrying after {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_count += 1
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.warning(f"Failed to send message to Telegram: {response.status_code}")
+                    break  # Other error, no retry
+            except RequestException as e:
+                logger.error(f"Error sending message to Telegram: {e}")
+                break  # Network error, stop retrying
 
         # Pause after each batch of messages to ensure the rate limit is respected
         if i % batch_size == 0:
