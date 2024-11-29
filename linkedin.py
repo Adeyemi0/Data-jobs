@@ -84,6 +84,6 @@ for location in locations:
 
 # Close the driver after scraping is complete
 driver.quit()
-
+df = pd.DataFrame(all_data)
 # Send the results to Telegram after scraping is complete
 send_to_telegram(df)
