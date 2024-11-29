@@ -42,6 +42,10 @@ def extract_jobs(location, job, start):
             try:
                 title_tag = result.find_element(By.TAG_NAME, 'a')
                 title = title_tag.text.strip()
+                
+                # Remove everything after "..." using regex
+                title = re.sub(r'\.\.\..*', '', title)
+                
                 link = title_tag.get_attribute('href')
             except:
                 title = "N/A"
