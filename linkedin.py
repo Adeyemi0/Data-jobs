@@ -74,7 +74,11 @@ def extract_jobs(location, job, start):
 # Function to send messages to Telegram
 def send_to_telegram(df):
     telegram_url_template = os.getenv("TELEGRAM_URL")
-    for _, row in df.iterrows():
+    max_messages_per_second = 30
+    delay_between_batches = 1  # 1 second delay after sending a batch of messages
+    batch_size = max_messages_per_second  # Send messages in batches of 30
+
+    for i, (_, row) in enumerate(df.iterrows(), start=1):
         message = f"{row['Title']}. \nLocation: {row['Location']}. \nLink: {row['Link']}. \nTime Posted: {row['Time Posted']}"
         telegram_url = telegram_url_template.format(message)
         try:
@@ -83,6 +87,10 @@ def send_to_telegram(df):
                 logger.warning(f"Failed to send message to Telegram: {response.status_code}")
         except requests.RequestException as e:
             logger.error(f"Error sending message to Telegram: {e}")
+
+        # Pause after each batch of messages to ensure the rate limit is respected
+        if i % batch_size == 0:
+            time.sleep(delay_between_batches)
 
 # Main scraping logic
 locations = ['United States', 'India', 'United Kingdom', 'Nigeria', 'Canada', 'United Arab Emirates']
