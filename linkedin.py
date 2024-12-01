@@ -113,7 +113,7 @@ def send_to_telegram(df):
             time.sleep(delay_between_batches)
 
 # Main scraping logic
-locations = ['United States', 'India', 'United Kingdom', 'Nigeria', 'Canada', 'United Arab Emirates']
+locations = ['Nigeria', 'United States', 'United Kingdom', 'Canada']
 jobs = ['machine learning', 'data analyst', 'data scientist', 'data engineer', 'business intelligence analyst']
 all_data = []
 
