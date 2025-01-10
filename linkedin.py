@@ -24,10 +24,10 @@ def configure_chrome_options():
     chrome_options.add_argument(f"user-agent={UserAgent().random}")  # Add a randomized user-agent
     return chrome_options
 
-# Function to extract job listings from Google search results
+# Function to extract job listings from LinkedIn
 def extract_jobs(location, job, start):
-    base_url = "https://www.google.com/search?q=site:linkedin.com/jobs+%22{}%22+and+%22jobs%22+and+%22{}%22&tbs=qdr:d&start={}"
-    search_url = base_url.format(job.replace(" ", "+"), location.replace(" ", "+"), start)
+    base_url = "https://www.linkedin.com/jobs/search/?keywords={}&location={}&start={}"
+    search_url = base_url.format(job.replace(" ", "%20"), location.replace(" ", "%20"), start)
     
     try:
         # Initialize browser for each iteration
@@ -37,7 +37,7 @@ def extract_jobs(location, job, start):
         time.sleep(random.uniform(5, 8))  # Randomized sleep to mimic human browsing behavior
         
         # Extract job results from the page
-        results = driver.find_elements(By.CSS_SELECTOR, 'div.MjjYud')
+        results = driver.find_elements(By.CSS_SELECTOR, 'div.job-card-container')
         all_data = []
         for result in results:
             try:
@@ -54,7 +54,7 @@ def extract_jobs(location, job, start):
                 link = "N/A"
 
             try:
-                description_tag = result.find_element(By.CSS_SELECTOR, 'div.VwiC3b')
+                description_tag = result.find_element(By.CSS_SELECTOR, 'div.job-card-list__footer')
                 description = description_tag.text.strip()
                 time_posted = re.search(r'\d+\s\w+\sago', description)
                 time_posted = time_posted.group() if time_posted else "N/A"
