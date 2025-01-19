@@ -32,7 +32,9 @@ def extract_jobs(location, job, start):
     try:
         # Initialize browser for each iteration
         chrome_options = configure_chrome_options()
-        driver = uc.Chrome(options=chrome_options)
+
+        # Force undetected_chromedriver to match your Chrome version (131 in this case)
+        driver = uc.Chrome(options=chrome_options, version_main=131)
         driver.get(search_url)
         time.sleep(random.uniform(5, 8))  # Randomized sleep to mimic human browsing behavior
         
