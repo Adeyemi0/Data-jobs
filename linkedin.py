@@ -5,135 +5,225 @@ import time
 import random
 import re
 import pandas as pd
-import os
-import requests
-import logging
-from fake_useragent import UserAgent
-from requests.exceptions import RequestException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+import json
+import requests  # For sending HTTP requests to Telegram API
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger()
+# Configure Chrome options
+chrome_options = Options()
+chrome_options.add_argument("--headless=new")  # Remove this line to run the browser in normal mode
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_argument("--disable-extensions")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument('--window-size=1920,1080')
+chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36')
 
-# Function to configure Chrome options
-def configure_chrome_options():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Run in headless mode
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument(f"user-agent={UserAgent().random}")  # Add a randomized user-agent
-    return chrome_options
-
-# Function to extract job listings from LinkedIn
-def extract_jobs(location, job, start):
-    base_url = "https://www.linkedin.com/jobs/search/?keywords={}&location={}&start={}"
-    search_url = base_url.format(job.replace(" ", "%20"), location.replace(" ", "%20"), start)
+# Function to convert "Time Posted" string to elapsed seconds
+def parse_time_posted(time_str):
+    if time_str == "N/A":
+        return float('inf')  # Treat missing data as very old (large value)
     
-    try:
-        # Initialize browser for each iteration
-        chrome_options = configure_chrome_options()
+    # Define regex patterns for extracting numbers and units
+    match = re.match(r'(\d+)\s+(\w+)\s+ago', time_str)
+    if not match:
+        return float('inf')  # Invalid format treated as very old
+    
+    num = int(match.group(1))
+    unit = match.group(2).lower()
+    
+    # Convert to seconds based on the unit (limited to seconds, minutes, and hours)
+    if unit in ['second', 'seconds']:
+        return num
+    elif unit in ['minute', 'minutes']:
+        return num * 60
+    elif unit in ['hour', 'hours']:
+        return num * 3600
+    else:
+        return float('inf')  # Unknown unit treated as very old
 
-        # Force undetected_chromedriver to match your Chrome version (131 in this case)
-        driver = uc.Chrome(options=chrome_options, version_main=131)
-        driver.get(search_url)
-        time.sleep(random.uniform(5, 8))  # Randomized sleep to mimic human browsing behavior
-        
-        # Extract job results from the page
-        results = driver.find_elements(By.CSS_SELECTOR, 'div.job-card-container')
-        all_data = []
-        for result in results:
-            try:
-                title_tag = result.find_element(By.TAG_NAME, 'a')
-                title = title_tag.text.strip()
-                
-                # Remove everything after "..." using regex
-                title = re.sub(r'\bLinkedIn\b.*', '', title, flags=re.IGNORECASE)
-                title = re.sub(r'\bhttps://\b.*', '', title, flags=re.IGNORECASE)
-                
-                link = title_tag.get_attribute('href')
-            except:
-                title = "N/A"
-                link = "N/A"
-
-            try:
-                description_tag = result.find_element(By.CSS_SELECTOR, 'div.job-card-list__footer')
-                description = description_tag.text.strip()
-                time_posted = re.search(r'\d+\s\w+\sago', description)
-                time_posted = time_posted.group() if time_posted else "N/A"
-            except:
-                description = "N/A"
-                time_posted = "N/A"
-
-            all_data.append({
-                "Title": title,
-                "Location": location,
-                "Job": job,
-                "Link": link,
-                "Time Posted": time_posted
-            })
-
-        driver.quit()  # Close browser after extracting jobs
-        return all_data
-
-    except Exception as e:
-        logger.error(f"Error during scraping for {job} in {location} (start={start}): {e}")
+# Function to extract job listings from Google search results
+def extract_jobs(driver, location, job, start):
+    base_url = "https://www.google.com/search?q=site:linkedin.com/jobs+%22{}%22+and+%22jobs%22+and+%22{}%22&tbs=qdr:d&start={}"
+    search_url = base_url.format(job.replace(" ", "+"), location.replace(" ", "+"), start)
+    
+    print(f"Searching: {search_url}")
+    driver.get(search_url)
+    time.sleep(random.uniform(3, 5))  # Add initial sleep to let the page load
+    
+    # Check for multiple possible selectors to handle potential Google layout changes
+    selectors = ['div.MjjYud', 'div.g', 'div.Gx5Zad', 'div.tF2Cxc']
+    
+    element_found = False
+    for selector in selectors:
+        try:
+            print(f"Trying selector: {selector}")
+            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+            results = driver.find_elements(By.CSS_SELECTOR, selector)
+            if results:
+                print(f"Found {len(results)} results with selector: {selector}")
+                element_found = True
+                break
+        except TimeoutException:
+            print(f"Timeout with selector: {selector}")
+            continue
+    
+    # If no elements found with any selector, log the error but don't save files
+    if not element_found:
+        print(f"ERROR: No results found with any selector for {location}, {job}, start={start}")
         return []
+    
+    all_data = []
+    for result in results:
+        try:
+            title_tag = result.find_element(By.TAG_NAME, 'a')
+            title = title_tag.text.strip()
+            link = title_tag.get_attribute('href')
+            
+            # If we couldn't extract a proper title, try another approach
+            if not title:
+                h3_tag = result.find_element(By.TAG_NAME, 'h3')
+                title = h3_tag.text.strip()
+        except NoSuchElementException:
+            title = "N/A"
+            link = "N/A"
+        
+        try:
+            # Look for the time posted information without storing the description
+            description_tag = None
+            for desc_selector in ['div.VwiC3b', 'div.IsZvec', 'span.aCOpRe']:
+                try:
+                    description_tag = result.find_element(By.CSS_SELECTOR, desc_selector)
+                    if description_tag:
+                        break
+                except:
+                    continue
+            
+            # Extract time posted from the description element if found
+            time_posted = "N/A"
+            if description_tag:
+                description_text = description_tag.text.strip()
+                time_match = re.search(r'\d+\s\w+\sago', description_text)
+                time_posted = time_match.group() if time_match else "N/A"
+        except:
+            time_posted = "N/A"
 
-# Function to send messages to Telegram with rate limit handling
-def send_to_telegram(df):
-    telegram_url_template = os.getenv("TELEGRAM_URL")
-    max_messages_per_second = 30
-    delay_between_batches = 1  # 1 second delay after sending a batch of messages
-    batch_size = max_messages_per_second  # Send messages in batches of 30
-    max_retries = 5  # Max retries in case of 429 rate-limiting error
-    retry_delay = 2  # Start with a 2-second delay between retries
-
-    for i, (_, row) in enumerate(df.iterrows(), start=1):
-        message = f"{row['Title']}. \nLocation: {row['Location']}. \nLink: {row['Link']}. \nTime Posted: {row['Time Posted']}"
-        telegram_url = telegram_url_template.format(message)
-        retry_count = 0
-
-        while retry_count <= max_retries:
-            try:
-                response = requests.get(telegram_url, timeout=10)
-                if response.status_code == 200:
-                    break  # Successful, break the retry loop
-                elif response.status_code == 429:
-                    logger.warning(f"Rate limit hit (429). Retrying after {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_count += 1
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.warning(f"Failed to send message to Telegram: {response.status_code}")
-                    break  # Other error, no retry
-            except RequestException as e:
-                logger.error(f"Error sending message to Telegram: {e}")
-                break  # Network error, stop retrying
-
-        # Pause after each batch of messages to ensure the rate limit is respected
-        if i % batch_size == 0:
-            time.sleep(delay_between_batches)
+        # Only add entries that have valid data AND contain 'https://www.linkedin.com/jobs' in the link
+        if title != "N/A" and link != "N/A" and 'https://www.linkedin.com/jobs' in link:
+            # Filter titles based on keywords in the 'jobs' list
+            if any(keyword.lower() in title.lower() for keyword in jobs):
+                all_data.append({
+                    "Title": title,
+                    "Location": location,
+                    "Link": link,
+                    "Time Posted": time_posted
+                })
+    
+    return all_data
 
 # Main scraping logic
-locations = ['Nigeria', 'United States', 'United Kingdom', 'Canada']
-jobs = ['machine learning', 'data analyst', 'data scientist', 'data engineer', 'business intelligence analyst']
+locations = ['United States']
+jobs = [
+    'machine learning',
+    'data analyst',
+    'data scientist',
+    'data engineer',
+    'business intelligence analyst',
+    'big data engineer',
+    'database administrator',
+    'data visualization specialist',
+    'quantitative analyst',
+    'natural language processing (NLP) engineer',
+    'computer vision engineer']
+
 all_data = []
 
-for location in locations:
-    for job in jobs:
-        for start in [1, 11]:  # Adjust start indices as needed
-            logger.info(f"Scraping jobs for '{job}' in '{location}' (start={start})")
-            job_data = extract_jobs(location, job, start)
-            all_data.extend(job_data)
-            
-            # Longer wait between requests to reduce the chance of being rate-limited
-            time.sleep(random.uniform(10, 20))
+# Initialize undetected Chrome driver
+try:
+    driver = uc.Chrome(options=chrome_options)
+    
+    for location in locations:
+        for job in jobs:
+            for start in [0, 10, 20]:
+                try:
+                    job_data = extract_jobs(driver, location, job, start)
+                    all_data.extend(job_data)
+                    
+                    # Log status but don't save interim files
+                    print(f"Collected {len(job_data)} jobs for {job} in {location} (start={start})")
+                    print(f"Total jobs collected so far: {len(all_data)}")
+                    
+                    # Longer wait between requests to reduce the chance of being rate-limited
+                    wait_time = random.uniform(15, 30)
+                    print(f"Waiting {wait_time:.2f} seconds before next request")
+                    time.sleep(wait_time)
+                    
+                except Exception as e:
+                    print(f"Error processing {job} in {location} at start={start}: {str(e)}")
+                    # Continue with next search instead of stopping the entire script
+                    continue
+                    
+finally:
+    # Make sure to close the driver even if an exception occurs
+    try:
+        driver.quit()
+    except:
+        pass
 
-# Save results to DataFrame
-df = pd.DataFrame(all_data)
-df.drop_duplicates(subset=['Title'], inplace=True)  # Remove duplicates
+# Save complete data to CSV
+if all_data:
+    df = pd.DataFrame(all_data)
+    # Additional verification to ensure all links have 'https://www.linkedin.com/jobs'
+    df = df[df['Link'].str.contains('https://www.linkedin.com/jobs')]
+    df['Title'] = df['Title'].apply(lambda x: re.split(r'\.\.\.', x)[0])
+    df['Title'] = df['Title'].apply(lambda x: x.split('\n')[0])
+    
+    # Parse "Time Posted" and add a new column for elapsed seconds
+    df['Elapsed Seconds'] = df['Time Posted'].apply(parse_time_posted)
+    
+    # Sort the DataFrame by elapsed seconds (ascending order: newest first)
+    df = df.sort_values(by='Elapsed Seconds')
+    # Drop the temporary "Elapsed Seconds" column (optional)
+    df = df.drop(columns=['Elapsed Seconds'])
+    
+    # Exclude the 'Job' column from the final DataFrame
+    df = df.drop(columns=['Job'], errors='ignore')
+    
+    df.to_json('jobs_data.json', orient='records', indent=4)
+    print("Data saved to jobs_data.json")
+else:
+    print("No data was collected")
 
-# Send the results to Telegram after scraping is complete
-send_to_telegram(df)
+# Send job postings to Telegram
+telegram_url_template = 'https://api.telegram.org/bot7173983862:AAFRR1WfQghxg9kfAYx83yVyPYJYcazjiwg/sendMessage?chat_id=-1002164889618&text="{}"'
 
-logger.info("Scraping completed and results sent to Telegram.")
+if not df.empty:
+    for _, row in df.iterrows():
+        title = row['Title']
+        location = row['Location']
+        link = row['Link']
+        posted_time = row['Time Posted']
+        
+        # Format the message
+        message = f"{title} is hiring. {location}. Posted {posted_time}. {link}"
+        
+        # URL encode the message
+        encoded_message = message.replace('"', '\\"')  # Escape double quotes
+        
+        # Construct the full Telegram API URL
+        telegram_url = telegram_url_template.format(encoded_message)
+        
+        # Send the message to Telegram
+        try:
+            response = requests.get(telegram_url)
+            if response.status_code == 200:
+                print(f"Successfully sent message to Telegram: {message}")
+            else:
+                print(f"Failed to send message to Telegram: {response.text}")
+        except Exception as e:
+            print(f"Error sending message to Telegram: {str(e)}")
+else:
+    print("No data to send to Telegram.")
