@@ -188,7 +188,8 @@ if all_data:
     df = df.sort_values(by='Elapsed Seconds')
     # Drop the temporary "Elapsed Seconds" column (optional)
     df = df.drop(columns=['Elapsed Seconds'])
-    
+
+    df = df.drop_duplicates(subset=['Link'], keep='first')
     # Exclude the 'Job' column from the final DataFrame
     df = df.drop(columns=['Job'], errors='ignore')
     
