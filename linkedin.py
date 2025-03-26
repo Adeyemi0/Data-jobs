@@ -127,17 +127,17 @@ def extract_jobs(driver, location, job, start):
 # Main scraping logic
 locations = ['United States']
 jobs = [
-    'machine learning',
-    'data analyst',
-    'data scientist',
-    'data engineer',
-    'business intelligence analyst',
-    'big data engineer',
-    'database administrator',
-    'data visualization specialist',
-    'quantitative analyst',
-    'natural language processing (NLP) engineer',
-    'computer vision engineer']
+    'machine-learning',
+    'data-analyst',
+    'data-scientist',
+    'data-engineer',
+    'business-intelligence analyst',
+    'big-data-engineer',
+    'database-administrator',
+    'data-visualization-specialist',
+    'quantitative-analyst',
+    'natural-language-processing-(NLP)-engineer',
+    'computer-vision-engineer']
 
 all_data = []
 
