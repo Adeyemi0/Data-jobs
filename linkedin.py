@@ -125,7 +125,7 @@ def extract_jobs(driver, location, job, start):
     return all_data
 
 # Main scraping logic
-locations = ['United States']
+locations = ['United States', 'Lagos, Nigeria', 'Abuja, Nigeria', 'United Kingdom']
 jobs = [
     'machine-learning',
     'data-analyst',
