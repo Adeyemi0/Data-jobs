@@ -138,9 +138,10 @@ jobs = [
 
 all_data = []
 
-# Initialize undetected Chrome driver
+# Initialize undetected Chrome driver with specific Chrome version
 try:
-    driver = uc.Chrome(options=chrome_options)
+    # Use version_main to tell undetected_chromedriver which Chrome version you're using
+    driver = uc.Chrome(options=chrome_options, version_main=134)  # Specify version 134 to match your Chrome version
     
     for location in locations:
         for job in jobs:
@@ -187,7 +188,7 @@ if all_data:
     df = df.drop(columns=['Elapsed Seconds'])
 
     df = df.drop_duplicates(subset=['Link'], keep='first')
-    # Exclude the 'Job' column from the final DataFrame
+    # Exclude the 'Job' column from the final DataFrame if it exists
     df = df.drop(columns=['Job'], errors='ignore')
     
     df.to_json('jobs_data.json', orient='records', indent=4)
@@ -198,7 +199,8 @@ else:
 # Send job postings to Telegram
 telegram_url_template = 'https://api.telegram.org/bot7173983862:AAFRR1WfQghxg9kfAYx83yVyPYJYcazjiwg/sendMessage?chat_id=-1002164889618&text="{}"'
 
-if not df.empty:
+# Make sure df exists and is not empty before trying to iterate through it
+if 'df' in locals() and not df.empty:
     for _, row in df.iterrows():
         title = row['Title']
         location = row['Location']
