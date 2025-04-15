@@ -125,7 +125,7 @@ def extract_jobs(driver, location, job, start):
     return all_data
 
 # Main scraping logic
-locations = ['United States', 'Lagos, Nigeria', 'Abuja, Nigeria', 'United Kingdom']
+locations = ['United States', 'United Kingdom']
 jobs = [
     'machine-learning',
     'data-analyst',
@@ -175,7 +175,7 @@ finally:
 if all_data:
     df = pd.DataFrame(all_data)
     # Additional verification to ensure all links have 'https://www.linkedin.com/jobs'
-    df = df[df['Link'].str.contains('https://www.linkedin.com/jobs')]
+    df = df[df['Link'].str.contains('https://www.linkedin.com/jobs/view')]
     df['Title'] = df['Title'].apply(lambda x: re.split(r'\.\.\.', x)[0])
     df['Title'] = df['Title'].apply(lambda x: x.split('\n')[0])
     
