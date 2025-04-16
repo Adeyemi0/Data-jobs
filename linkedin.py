@@ -58,6 +58,7 @@ def extract_jobs(driver, location, job, start):
     selectors = ['div.MjjYud', 'div.g', 'div.Gx5Zad', 'div.tF2Cxc']
     
     element_found = False
+    results = []
     for selector in selectors:
         try:
             print(f"Trying selector: {selector}")
@@ -114,7 +115,7 @@ def extract_jobs(driver, location, job, start):
         # Only add entries that have valid data AND contain 'https://www.linkedin.com/jobs' in the link
         if title != "N/A" and link != "N/A" and 'https://www.linkedin.com/jobs' in link:
             # Filter titles based on keywords in the 'jobs' list
-            if any(keyword.lower() in title.lower() for keyword in jobs):
+            if any(keyword.lower().replace('-', ' ') in title.lower() for keyword in jobs):
                 all_data.append({
                     "Title": title,
                     "Location": location,
@@ -143,8 +144,11 @@ try:
     # Use version_main to tell undetected_chromedriver which Chrome version you're using
     driver = uc.Chrome(options=chrome_options, version_main=134)  # Specify version 134 to match your Chrome version
     
+    # Correctly iterate through both locations
     for location in locations:
+        print(f"Processing jobs for location: {location}")
         for job in jobs:
+            print(f"  Searching for job: {job}")
             for start in [0, 10, 20]:
                 try:
                     job_data = extract_jobs(driver, location, job, start)
@@ -191,8 +195,10 @@ if all_data:
     # Exclude the 'Job' column from the final DataFrame if it exists
     df = df.drop(columns=['Job'], errors='ignore')
     
+    # Save to JSON and CSV for flexibility
     df.to_json('jobs_data.json', orient='records', indent=4)
-    print("Data saved to jobs_data.json")
+    df.to_csv('jobs_data.csv', index=False)
+    print("Data saved to jobs_data.json and jobs_data.csv")
 else:
     print("No data was collected")
 
@@ -225,5 +231,8 @@ if 'df' in locals() and not df.empty:
                 print(f"Failed to send message to Telegram: {response.text}")
         except Exception as e:
             print(f"Error sending message to Telegram: {str(e)}")
+        
+        # Add a small delay between Telegram messages to avoid rate limiting
+        time.sleep(random.uniform(1, 3))
 else:
     print("No data to send to Telegram.")
